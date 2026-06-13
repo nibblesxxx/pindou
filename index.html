@@ -310,47 +310,6 @@
       font-family: inherit;
     }
 
-    /* Image upload zone */
-    .upload-zone {
-      border: 2px dashed #d0d5dd;
-      border-radius: 12px;
-      padding: 32px 24px;
-      text-align: center;
-      background: var(--surface);
-      cursor: pointer;
-      transition: all var(--transition);
-      margin-bottom: 16px;
-    }
-    .upload-zone:hover, .upload-zone.dragover {
-      border-color: var(--primary);
-      background: rgba(74,144,217,0.04);
-    }
-    .upload-zone .icon {
-      font-size: 40px;
-      margin-bottom: 8px;
-    }
-    .upload-zone p {
-      font-size: 14px;
-      color: var(--text-secondary);
-      margin: 4px 0;
-    }
-    .upload-zone .hint {
-      font-size: 12px;
-      color: #adb5bd;
-    }
-
-    /* Preview image */
-    .preview-container {
-      margin-bottom: 16px;
-      text-align: center;
-    }
-    .preview-container img {
-      max-width: 100%;
-      max-height: 300px;
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-    }
-
     /* Match results */
     .match-list {
       display: grid;
@@ -496,17 +455,11 @@
     <div style="padding:14px;background:var(--surface);border-radius:var(--radius);margin-bottom:12px;">
       <div style="font-size:13px;font-weight:600;margin-bottom:4px;">📝 文字导入色号</div>
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">
-        粘贴色号列表，或上传文字截图自动识别。支持格式：<code>A1 50</code> / <code>A3×30</code> / <code>B2:100</code>
+        粘贴色号列表，支持格式：<code>A1 50</code> / <code>A3×30</code> / <code>B2:100</code> / <code>50 A1</code>
       </div>
-      <textarea id="text-import-input" rows="6" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:monospace;resize:vertical;" placeholder="每行格式：色号 数量&#10;例如：&#10;A1 50&#10;A3 30&#10;B2 100&#10;ZG8 25"></textarea>
-      <div id="text-drop-zone" style="border:2px dashed #d0d5dd;border-radius:8px;padding:12px;text-align:center;margin-top:8px;cursor:pointer;transition:border-color 0.15s;font-size:12px;color:var(--text-secondary);"
-           onclick="document.getElementById('text-image-input').click()">
-        🖼️ 拖拽文字截图到此处，或点击上传
-      </div>
-      <div style="display:flex;gap:8px;margin-top:8px;">
+      <textarea id="text-import-input" rows="8" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:monospace;resize:vertical;" placeholder="每行格式：色号 数量&#10;例如：&#10;A1 50&#10;A3 30&#10;B2 100&#10;ZG8 25"></textarea>
+      <div style="margin-top:8px;">
         <button class="btn btn-primary btn-sm" onclick="parseTextImport()">📋 解析文字</button>
-        <button class="btn btn-outline btn-sm" onclick="document.getElementById('text-image-input').click()">🖼️ 上传文字图</button>
-        <input type="file" id="text-image-input" accept="image/*" style="display:none" onchange="handleTextImage(event)">
       </div>
     </div>
     <div id="match-results"></div>
@@ -911,10 +864,6 @@ let isDirty = false;       // unsaved changes in warehouse
 let matchResults = [];     // current image match: [{code, count, ...}]
 let editingCode = null;    // which color card is being edited
 
-// ===== OCR state =====
-let ocrWorker = null;
-let ocrLoading = false;
-
 // ===== STORAGE KEYS =====
 const STORAGE_KEY_WAREHOUSE = 'bead_warehouse';
 const STORAGE_KEY_TOKEN = 'bead_github_token';
@@ -1151,87 +1100,6 @@ function importCSV() {
   input.click();
 }
 
-// ===== TESSERACT OCR =====
-async function loadTesseract() {
-  if (ocrWorker) return ocrWorker;
-  if (ocrLoading) {
-    return new Promise((resolve, reject) => {
-      const check = setInterval(() => {
-        if (ocrWorker) { clearInterval(check); resolve(ocrWorker); }
-        if (!ocrLoading) { clearInterval(check); reject(new Error('OCR load failed')); }
-      }, 200);
-    });
-  }
-  ocrLoading = true;
-  toast('正在加载 OCR 引擎（首次约需几秒）...');
-
-  if (typeof Tesseract === 'undefined') {
-    await new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-      script.onload = resolve;
-      script.onerror = () => reject(new Error('OCR 引擎加载失败，请检查网络'));
-      document.head.appendChild(script);
-    });
-  }
-
-  try {
-    ocrWorker = await Tesseract.createWorker('eng', 1, {
-      langPath: 'https://cdn.jsdelivr.net/npm/tesseract.js-data@2.0.0/langdata/',
-    });
-    await ocrWorker.setParameters({
-      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 xX×:,. ',
-      tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
-    });
-  } catch (e) {
-    ocrLoading = false;
-    console.error('Tesseract init error:', e);
-    throw new Error(e.message || 'OCR 加载失败');
-  }
-  ocrLoading = false;
-  toast('OCR 引擎就绪 ✅');
-  return ocrWorker;
-}
-
-// Preprocess image for better OCR: grayscale + contrast + normalize
-function preprocessForOCR(img) {
-  const canvas = document.createElement('canvas');
-  const maxDim = 2000;
-  let w = img.naturalWidth, h = img.naturalHeight;
-  if (w > maxDim || h > maxDim) {
-    const scale = maxDim / Math.max(w, h);
-    w = Math.floor(w * scale);
-    h = Math.floor(h * scale);
-  }
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0, w, h);
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const data = imageData.data;
-
-  // Convert to grayscale and apply contrast stretch
-  let min = 255, max = 0;
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = Math.round(data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114);
-    data[i] = data[i+1] = data[i+2] = gray;
-    if (gray < min) min = gray;
-    if (gray > max) max = gray;
-  }
-
-  // Contrast stretch + threshold
-  const range = max - min || 1;
-  for (let i = 0; i < data.length; i += 4) {
-    let v = (data[i] - min) / range * 255;
-    // Binarize at 50% threshold for sharper text
-    v = v > 128 ? 255 : 0;
-    data[i] = data[i+1] = data[i+2] = v;
-  }
-
-  ctx.putImageData(imageData, 0, 0);
-  return canvas;
-}
-
 function buildMatchResults(matched) {
   matchResults = Object.entries(matched)
     .map(([code, count]) => ({
@@ -1369,69 +1237,6 @@ function parseColorCodeText(text) {
   return matched;
 }
 
-// Drag-and-drop for text image
-(function() {
-  const zone = document.getElementById('text-drop-zone');
-  if (!zone) return;
-  zone.addEventListener('dragover', function(e) {
-    e.preventDefault();
-    zone.style.borderColor = 'var(--primary)';
-    zone.style.background = 'rgba(74,144,217,0.04)';
-  });
-  zone.addEventListener('dragleave', function() {
-    zone.style.borderColor = '#d0d5dd';
-    zone.style.background = '';
-  });
-  zone.addEventListener('drop', function(e) {
-    e.preventDefault();
-    zone.style.borderColor = '#d0d5dd';
-    zone.style.background = '';
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.match(/image\//)) {
-      handleTextImage({ target: { files: [file] } });
-    }
-  });
-})();
-
-async function handleTextImage(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  toast('正在加载 OCR 引擎...');
-  let worker;
-  try {
-    worker = await loadTesseract();
-  } catch (e) {
-    toast('OCR 引擎加载失败: ' + e.message + '。请改用粘贴文字');
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = async function(e) {
-    const img = new Image();
-    img.onload = async function() {
-      toast('正在识别文字...');
-      try {
-        // Preprocess image
-        const processed = preprocessForOCR(img);
-        const { data: { text } } = await worker.recognize(processed);
-        const cleaned = text.trim();
-        if (!cleaned) {
-          toast('⚠ 未识别到文字，请尝试粘贴文本');
-          return;
-        }
-        document.getElementById('text-import-input').value = cleaned;
-        toast(`识别完成，共 ${cleaned.split('\n').filter(l=>l.trim()).length} 行。请核对后点"解析文字"`);
-      } catch (e) {
-        toast('OCR 识别失败: ' + e.message);
-        console.error('OCR error:', e);
-      }
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
 function renderMatchResults() {
   const container = document.getElementById('match-results');
   const actions = document.getElementById('match-actions');
@@ -1476,7 +1281,6 @@ function clearMatches() {
   document.getElementById('match-results').innerHTML = '';
   document.getElementById('match-actions').style.display = 'none';
   document.getElementById('text-import-input').value = '';
-  document.getElementById('text-image-input').value = '';
 }
 
 // ===== DEDUCTION & UNDO =====
