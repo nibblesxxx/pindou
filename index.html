@@ -832,16 +832,120 @@ const STORAGE_KEY_WAREHOUSE = 'bead_warehouse';
 const STORAGE_KEY_TOKEN = 'bead_github_token';
 const STORAGE_KEY_REPO = 'bead_github_repo';
 
-// ===== STUBS (will be replaced in subsequent tasks) =====
-function updateStatusBar() {
-  // Will be implemented in Task 3
+// ===== STUBS FOR FUTURE TASKS =====
+function showSetupModal() { toast('请先完成设置功能（Task 4）'); }
+function loadFromGitHub() { toast('请先完成云端功能（Task 5）'); }
+function saveToGitHub() { toast('请先完成云端功能（Task 5）'); }
+function handleFileSelect(e) { toast('请先完成图片功能（Task 6）'); }
+function undoLastDeduction() { toast('请先完成撤销功能（Task 7）'); }
+function clearMatches() {}
+function skipSetup() {}
+function saveSetup() {}
+function checkSetup() { /* Implemented in Task 4 */ }
+
+// ===== TAB SWITCHING =====
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+  document.getElementById(`panel-${tab}`).classList.add('active');
+  if (tab === 'warehouse') renderWarehouse();
 }
-function checkSetup() {
-  // Will be implemented in Task 4
-}
+
+// ===== WAREHOUSE RENDERING =====
 function renderWarehouse() {
-  // Will be implemented in Task 3
+  const grid = document.getElementById('warehouse-grid');
+  const search = document.getElementById('warehouse-search').value.toLowerCase();
+
+  const filtered = MARD_COLORS.filter(c => {
+    if (!search) return true;
+    return c.code.toLowerCase().includes(search);
+  });
+
+  grid.innerHTML = filtered.map(c => {
+    const qty = warehouse[c.code] || 0;
+    let qtyClass = '';
+    if (qty < 0) qtyClass = 'negative';
+    else if (qty > 0 && qty < 20) qtyClass = 'low';
+
+    return `
+      <div class="color-card" onclick="openEditModal('${c.code}')" title="${c.code} - 库存: ${qty}">
+        <div class="swatch" style="background:rgb(${c.r},${c.g},${c.b})"></div>
+        <div class="code">${c.code}</div>
+        <div class="qty ${qtyClass}">${qty}</div>
+      </div>
+    `;
+  }).join('');
 }
+
+// ===== EDIT MODAL =====
+function openEditModal(code) {
+  const c = MARD_MAP[code];
+  if (!c) return;
+  editingCode = code;
+  document.getElementById('edit-swatch').style.background = `rgb(${c.r},${c.g},${c.b})`;
+  document.getElementById('edit-code').textContent = c.code;
+  document.getElementById('edit-rgb').textContent = `RGB(${c.r}, ${c.g}, ${c.b})`;
+  document.getElementById('edit-qty').value = warehouse[code] || 0;
+  document.getElementById('edit-modal').classList.add('show');
+  setTimeout(() => document.getElementById('edit-qty').select(), 100);
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.remove('show');
+  editingCode = null;
+  renderWarehouse();
+}
+
+function saveEdit() {
+  const newQty = parseInt(document.getElementById('edit-qty').value);
+  if (isNaN(newQty)) return;
+  warehouse[editingCode] = newQty;
+  isDirty = true;
+  saveToLocal();
+  closeEditModal();
+  updateStatusBar();
+  toast('已修改 ' + editingCode);
+}
+
+// ===== TOAST =====
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+// ===== LOCAL PERSISTENCE =====
+function saveToLocal() {
+  localStorage.setItem(STORAGE_KEY_WAREHOUSE, JSON.stringify(warehouse));
+}
+
+function updateStatusBar() {
+  const hasToken = !!(localStorage.getItem(STORAGE_KEY_TOKEN) && localStorage.getItem(STORAGE_KEY_REPO));
+  const statusEl = document.getElementById('status-text');
+  if (hasToken) {
+    statusEl.innerHTML = '<span class="status-dot cloud"></span> 云端模式';
+  } else {
+    statusEl.innerHTML = '<span class="status-dot local"></span> 本地模式';
+  }
+
+  const dirtyEl = document.getElementById('dirty-indicator');
+  dirtyEl.textContent = isDirty ? '⚠ 有未保存的修改' : '';
+}
+
+// ===== MODAL OVERLAY CLICK TO CLOSE =====
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('modal-overlay')) {
+    e.target.classList.remove('show');
+    if (editingCode !== null) {
+      editingCode = null;
+      renderWarehouse();
+    }
+  }
+});
 
 // ===== INITIALIZATION =====
 function init() {
