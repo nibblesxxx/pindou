@@ -870,9 +870,162 @@ function saveSetup() {
   toast('已连接 GitHub！点击"云端加载"获取数据');
 }
 
+// ===== GITHUB API =====
+function getApiHeaders() {
+  const token = localStorage.getItem(STORAGE_KEY_TOKEN);
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Accept': 'application/vnd.github.v3+json',
+  };
+}
+
+function getRepo() {
+  return localStorage.getItem(STORAGE_KEY_REPO);
+}
+
+function getApiUrl() {
+  return `https://api.github.com/repos/${getRepo()}/contents/warehouse.csv`;
+}
+
+async function loadFromGitHub() {
+  const token = localStorage.getItem(STORAGE_KEY_TOKEN);
+  if (!token || !getRepo()) {
+    toast('请先配置 GitHub 连接');
+    showSetupModal();
+    return;
+  }
+
+  const btn = document.getElementById('btn-load-cloud');
+  btn.disabled = true;
+  btn.textContent = '⏳ 加载中...';
+
+  try {
+    const resp = await fetch(getApiUrl(), { headers: getApiHeaders() });
+    if (resp.status === 404) {
+      // No warehouse.csv yet — initialize empty
+      initEmptyWarehouse();
+      saveToLocal();
+      isDirty = true;
+      renderWarehouse();
+      toast('云端无库存文件，已初始化为全 0');
+      updateStatusBar();
+      return;
+    }
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      const msg = err.message || `HTTP ${resp.status}`;
+      if (resp.status === 401) throw new Error('Token 无效或已过期，请重新配置');
+      if (resp.status === 403) throw new Error('Token 权限不足或 API 限流');
+      throw new Error(msg);
+    }
+
+    const data = await resp.json();
+    const content = atob(data.content.replace(/\n/g, ''));
+    const parsed = parseCSV(content);
+
+    // Merge: update warehouse with cloud values
+    MARD_COLORS.forEach(c => {
+      if (parsed[c.code] !== undefined) {
+        warehouse[c.code] = parseInt(parsed[c.code]) || 0;
+      }
+    });
+
+    isDirty = false;
+    saveToLocal();
+    renderWarehouse();
+    updateStatusBar();
+    toast('已从云端加载库存');
+  } catch (e) {
+    toast('加载失败: ' + e.message);
+    console.error('GitHub load error:', e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 云端加载';
+  }
+}
+
+async function saveToGitHub() {
+  const token = localStorage.getItem(STORAGE_KEY_TOKEN);
+  if (!token || !getRepo()) {
+    toast('请先配置 GitHub 连接');
+    showSetupModal();
+    return;
+  }
+
+  const btn = document.getElementById('btn-save-cloud');
+  btn.disabled = true;
+  btn.textContent = '⏳ 保存中...';
+
+  try {
+    const csv = warehouseToCSV();
+    // Proper UTF-8 base64 encoding
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(csv);
+    const content = btoa(String.fromCharCode(...bytes));
+
+    // Get current file SHA (if exists)
+    let sha = null;
+    try {
+      const existing = await fetch(getApiUrl(), { headers: getApiHeaders() });
+      if (existing.ok) {
+        const data = await existing.json();
+        sha = data.sha;
+      }
+    } catch(e) { /* file doesn't exist yet, which is fine */ }
+
+    const body = {
+      message: 'Update warehouse.csv',
+      content: content,
+    };
+    if (sha) body.sha = sha;
+
+    const resp = await fetch(getApiUrl(), {
+      method: 'PUT',
+      headers: { ...getApiHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.message || `HTTP ${resp.status}`);
+    }
+
+    isDirty = false;
+    updateStatusBar();
+    toast('已保存到云端 ✅');
+  } catch (e) {
+    toast('保存失败: ' + e.message);
+    console.error('GitHub save error:', e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💾 保存到云端';
+  }
+}
+
+// ===== CSV HELPERS =====
+function warehouseToCSV() {
+  let csv = '色号,库存\n';
+  MARD_COLORS.forEach(c => {
+    csv += `${c.code},${warehouse[c.code] || 0}\n`;
+  });
+  return csv;
+}
+
+function parseCSV(text) {
+  const result = {};
+  const lines = text.trim().split('\n');
+  // Skip header if present
+  const start = lines[0].toLowerCase().includes('色号') || lines[0].toLowerCase().includes('code') ? 1 : 0;
+  for (let i = start; i < lines.length; i++) {
+    const parts = lines[i].split(',');
+    if (parts.length >= 2) {
+      result[parts[0].trim()] = parseInt(parts[1].trim()) || 0;
+    }
+  }
+  return result;
+}
+
 // ===== STUBS FOR FUTURE TASKS =====
-function loadFromGitHub() { toast('请先完成云端功能（Task 5）'); }
-function saveToGitHub() { toast('请先完成云端功能（Task 5）'); }
 function handleFileSelect(e) { toast('请先完成图片功能（Task 6）'); }
 function undoLastDeduction() { toast('请先完成撤销功能（Task 7）'); }
 function clearMatches() {}
