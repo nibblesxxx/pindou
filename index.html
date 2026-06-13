@@ -1648,8 +1648,79 @@ function parseTextImport() {
     toast('未识别到有效色号，请检查格式');
     return;
   }
+  // Show review panel instead of directly building results
+  showTextReview(matched);
+}
+
+function showTextReview(matched) {
+  const entries = Object.entries(matched)
+    .map(([code, count]) => ({ code, count, swatch: MARD_MAP[code] }))
+    .sort((a, b) => naturalSortKey(a.code)[1] - naturalSortKey(b.code)[1])
+    .sort((a, b) => naturalSortKey(a.code)[0].localeCompare(naturalSortKey(b.code)[0]));
+
+  const total = entries.reduce((s, e) => s + e.count, 0);
+
+  let html = `
+    <div style="margin-bottom:8px;font-size:13px;font-weight:600;">
+      📋 解析结果核对（${entries.length} 种色号，共 ${total} 颗）
+    </div>
+    <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">
+      核对无误后点确认，有误可修改数量或删除行
+    </div>
+    <div style="max-height:350px;overflow-y:auto;margin-bottom:8px;">
+  `;
+
+  entries.forEach((e, i) => {
+    html += `
+      <div class="review-row" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface);border-radius:6px;margin-bottom:4px;">
+        <div style="width:22px;height:22px;border-radius:4px;background:rgb(${e.swatch.r},${e.swatch.g},${e.swatch.b});border:1px solid rgba(0,0,0,0.1);flex-shrink:0;"></div>
+        <span style="font-weight:600;font-size:13px;min-width:36px;">${e.code}</span>
+        <span style="font-size:11px;color:var(--text-secondary);min-width:50px;">RGB(${e.swatch.r},${e.swatch.g},${e.swatch.b})</span>
+        <input type="number" class="review-qty" data-code="${e.code}" value="${e.count}" min="0" max="99999" style="width:60px;padding:4px;border:1px solid var(--border);border-radius:4px;font-size:13px;text-align:center;font-family:inherit;">
+        <span style="font-size:12px;color:var(--text-secondary);">颗</span>
+        <button class="btn btn-sm" onclick="this.closest('.review-row').remove();updateReviewTotal();" style="margin-left:auto;padding:2px 8px;font-size:11px;color:var(--danger);background:transparent;border:1px solid var(--danger);border-radius:4px;cursor:pointer;">✕</button>
+      </div>
+    `;
+  });
+
+  html += `</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span id="review-total" style="font-size:13px;font-weight:600;">合计: ${total} 颗</span>
+      <button class="btn btn-outline btn-sm" onclick="clearMatches();setMode('text');" style="margin-left:auto;">取消</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmTextImport()">✅ 确认导入</button>
+    </div>
+  `;
+
+  document.getElementById('match-results').innerHTML = html;
+  document.getElementById('match-actions').style.display = 'none';
+}
+
+function updateReviewTotal() {
+  let total = 0;
+  document.querySelectorAll('.review-qty').forEach(input => {
+    total += parseInt(input.value) || 0;
+  });
+  const el = document.getElementById('review-total');
+  if (el) el.textContent = `合计: ${total} 颗`;
+}
+
+function confirmTextImport() {
+  const matched = {};
+  document.querySelectorAll('.review-qty').forEach(input => {
+    const code = input.dataset.code;
+    const count = parseInt(input.value) || 0;
+    if (count > 0 && MARD_MAP[code]) {
+      matched[code] = (matched[code] || 0) + count;
+    }
+  });
+
+  if (Object.keys(matched).length === 0) {
+    toast('没有有效条目');
+    return;
+  }
+
   buildMatchResults(matched);
-  toast(`解析到 ${Object.keys(matched).length} 种色号，共 ${Object.values(matched).reduce((a,b)=>a+b,0)} 颗豆`);
+  toast(`已导入 ${Object.keys(matched).length} 种色号`);
 }
 
 function parseColorCodeText(text) {
