@@ -1025,10 +1025,195 @@ function parseCSV(text) {
   return result;
 }
 
+// ===== IMAGE UPLOAD & PROCESSING =====
+const uploadZone = document.getElementById('upload-zone');
+
+uploadZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  uploadZone.classList.add('dragover');
+});
+
+uploadZone.addEventListener('dragleave', () => {
+  uploadZone.classList.remove('dragover');
+});
+
+uploadZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) processImage(file);
+});
+
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (file) processImage(file);
+}
+
+function processImage(file) {
+  if (!file.type.match(/image\/(png|jpeg|webp)/)) {
+    toast('请上传 PNG、JPG 或 WebP 格式的图片');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      extractColors(img);
+      showPreview(img);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function showPreview(img) {
+  const container = document.getElementById('preview-container');
+  container.style.display = 'block';
+  container.innerHTML = `<img src="${img.src}" alt="预览">`;
+}
+
+function extractColors(img) {
+  // Limit max dimension to 2000px
+  let w = img.naturalWidth;
+  let h = img.naturalHeight;
+  const maxDim = 2000;
+  if (w > maxDim || h > maxDim) {
+    const scale = maxDim / Math.max(w, h);
+    w = Math.floor(w * scale);
+    h = Math.floor(h * scale);
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+
+  const imageData = ctx.getImageData(0, 0, w, h);
+  const pixels = imageData.data;
+
+  // Count unique colors
+  const colorCount = {};
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i];
+    const g = pixels[i + 1];
+    const b = pixels[i + 2];
+    const a = pixels[i + 3];
+
+    if (a < 128) continue; // skip transparent/semi-transparent pixels
+
+    const key = `${r},${g},${b}`;
+    colorCount[key] = (colorCount[key] || 0) + 1;
+  }
+
+  const uniqueColors = Object.entries(colorCount).map(([key, count]) => {
+    const [r, g, b] = key.split(',').map(Number);
+    return { r, g, b, count };
+  });
+
+  if (uniqueColors.length > 500) {
+    if (!confirm(`检测到 ${uniqueColors.length} 种不同颜色（超过500种），可能不是拼豆图。\n\n仍要继续识别吗？`)) {
+      clearMatches();
+      return;
+    }
+  }
+
+  matchColorsToMARD(uniqueColors);
+}
+
+function matchColorsToMARD(colors) {
+  // Match each unique color to nearest MARD color using squared Euclidean distance
+  const matched = {};
+
+  colors.forEach(({r, g, b, count}) => {
+    let bestCode = null;
+    let bestDist = Infinity;
+
+    for (const m of MARD_COLORS) {
+      const dr = r - m.r;
+      const dg = g - m.g;
+      const db = b - m.b;
+      const dist = dr * dr + dg * dg + db * db; // squared Euclidean (faster, same result)
+
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestCode = m.code;
+      }
+    }
+
+    if (!matched[bestCode]) {
+      matched[bestCode] = 0;
+    }
+    matched[bestCode] += count;
+  });
+
+  // Convert to sorted array
+  matchResults = Object.entries(matched)
+    .map(([code, count]) => ({
+      code,
+      count,
+      swatch: MARD_MAP[code],
+      stock: warehouse[code] || 0,
+      insufficient: (warehouse[code] || 0) < count,
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  renderMatchResults();
+}
+
+function renderMatchResults() {
+  const container = document.getElementById('match-results');
+  const actions = document.getElementById('match-actions');
+
+  if (matchResults.length === 0) {
+    container.innerHTML = '';
+    actions.style.display = 'none';
+    return;
+  }
+
+  const total = matchResults.reduce((s, m) => s + m.count, 0);
+
+  container.innerHTML = `
+    <div style="margin-bottom:8px;font-size:13px;font-weight:600;">
+      匹配结果（共 <b>${total}</b> 颗豆子，<b>${matchResults.length}</b> 种色号）
+    </div>
+    <div class="match-list">
+      ${matchResults.map(m => `
+        <div class="match-item${m.insufficient ? ' insufficient' : ''}">
+          <div class="m-swatch" style="background:rgb(${m.swatch.r},${m.swatch.g},${m.swatch.b})"></div>
+          <span class="m-code">${m.code}</span>
+          <span class="m-count">×${m.count}</span>
+        </div>
+      `).join('')}
+    </div>
+    <button class="btn btn-primary" onclick="confirmDeduction()" style="width:100%;margin-bottom:8px;">
+      ✅ 确认扣除（共 <b>${total}</b> 颗）
+    </button>
+  `;
+
+  actions.style.display = 'flex';
+
+  // Suggest saving after deduction
+  if (matchResults.some(m => m.insufficient)) {
+    const warning = matchResults.filter(m => m.insufficient).map(m => m.code).join(', ');
+    container.innerHTML += `<p style="font-size:11px;color:var(--danger);margin-top:4px;">⚠ 库存不足: ${warning}（将变为负数）</p>`;
+  }
+}
+
+function clearMatches() {
+  matchResults = [];
+  document.getElementById('match-results').innerHTML = '';
+  document.getElementById('match-actions').style.display = 'none';
+  document.getElementById('preview-container').style.display = 'none';
+  document.getElementById('preview-container').innerHTML = '';
+  const fileInput = document.getElementById('file-input');
+  if (fileInput) fileInput.value = '';
+}
+
 // ===== STUBS FOR FUTURE TASKS =====
-function handleFileSelect(e) { toast('请先完成图片功能（Task 6）'); }
 function undoLastDeduction() { toast('请先完成撤销功能（Task 7）'); }
-function clearMatches() {}
+function confirmDeduction() { toast('请先完成扣除功能（Task 7）'); }
 
 // ===== TAB SWITCHING =====
 function switchTab(tab) {
