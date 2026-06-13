@@ -1176,14 +1176,17 @@ async function loadTesseract() {
   }
 
   try {
-    ocrWorker = await Tesseract.createWorker('eng');
+    ocrWorker = await Tesseract.createWorker('eng', 1, {
+      langPath: 'https://cdn.jsdelivr.net/npm/tesseract.js-data@2.0.0/langdata/',
+    });
     await ocrWorker.setParameters({
       tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 xX×:,. ',
       tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
     });
   } catch (e) {
     ocrLoading = false;
-    throw e;
+    console.error('Tesseract init error:', e);
+    throw new Error(e.message || 'OCR 加载失败');
   }
   ocrLoading = false;
   toast('OCR 引擎就绪 ✅');
