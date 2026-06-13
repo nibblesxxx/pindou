@@ -848,7 +848,18 @@ function init() {
   // Load warehouse from localStorage
   const saved = localStorage.getItem(STORAGE_KEY_WAREHOUSE);
   if (saved) {
-    try { warehouse = JSON.parse(saved); } catch(e) { initEmptyWarehouse(); }
+    try {
+      warehouse = JSON.parse(saved);
+      // Validate: all values must be finite numbers
+      for (const [code, qty] of Object.entries(warehouse)) {
+        if (typeof qty !== 'number' || !Number.isFinite(qty)) {
+          throw new Error(`Invalid warehouse value for ${code}: ${qty}`);
+        }
+      }
+    } catch(e) {
+      console.warn('Warehouse data corrupted, reinitializing:', e);
+      initEmptyWarehouse();
+    }
   } else {
     initEmptyWarehouse();
   }
