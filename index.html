@@ -450,6 +450,9 @@
       <button class="btn btn-outline btn-sm" onclick="showSetupModal()">⚙️ 设置</button>
       <button class="btn btn-outline btn-sm" id="btn-load-cloud" onclick="loadFromGitHub()">🔄 云端加载</button>
       <button class="btn btn-primary btn-sm" id="btn-save-cloud" onclick="saveToGitHub()">💾 保存到云端</button>
+      <button class="btn btn-outline btn-sm" onclick="exportCSV()">📥 导出CSV</button>
+      <button class="btn btn-outline btn-sm" onclick="importCSV()">📤 导入CSV</button>
+      <button class="btn btn-outline btn-sm" onclick="resetWarehouse()" style="color:var(--danger)">🗑 清空</button>
     </div>
     <div class="color-grid" id="warehouse-grid"></div>
   </section>
@@ -1025,6 +1028,44 @@ function parseCSV(text) {
   return result;
 }
 
+function exportCSV() {
+  const csv = warehouseToCSV();
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'warehouse.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('CSV 已下载');
+}
+
+function importCSV() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv';
+  input.onchange = function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(re) {
+      const parsed = parseCSV(re.target.result);
+      MARD_COLORS.forEach(c => {
+        if (parsed[c.code] !== undefined) {
+          warehouse[c.code] = parseInt(parsed[c.code]) || 0;
+        }
+      });
+      isDirty = true;
+      saveToLocal();
+      renderWarehouse();
+      updateStatusBar();
+      toast('CSV 已导入');
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
 // ===== IMAGE UPLOAD & PROCESSING =====
 const uploadZone = document.getElementById('upload-zone');
 
@@ -1082,6 +1123,10 @@ function extractColors(img) {
     const scale = maxDim / Math.max(w, h);
     w = Math.floor(w * scale);
     h = Math.floor(h * scale);
+  }
+
+  if (img.naturalWidth > maxDim || img.naturalHeight > maxDim) {
+    toast(`图片过大，已缩放到 ${w}×${h} 进行处理`);
   }
 
   const canvas = document.createElement('canvas');
@@ -1405,8 +1450,27 @@ function initEmptyWarehouse() {
   MARD_COLORS.forEach(c => { warehouse[c.code] = 0; });
 }
 
+function resetWarehouse() {
+  if (!confirm('确定要清空所有库存吗？（所有色号库存将变为 0）\n\n提示：如有需要可先用"导出 CSV"备份。')) return;
+  initEmptyWarehouse();
+  isDirty = true;
+  saveToLocal();
+  renderWarehouse();
+  updateStatusBar();
+  toast('所有库存已清零');
+}
+
 // Call init on page load
 init();
+
+// Warn before leaving with unsaved changes
+window.addEventListener('beforeunload', (e) => {
+  if (isDirty) {
+    e.preventDefault();
+    e.returnValue = '你有未保存的修改，确定要离开吗？';
+    return e.returnValue;
+  }
+});
 </script>
 
 </body>
