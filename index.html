@@ -527,6 +527,7 @@
         <button class="btn btn-sm mode-btn active" data-mode="pixel" onclick="setMode('pixel')">🎯 像素图</button>
         <button class="btn btn-sm mode-btn" data-mode="photo" onclick="setMode('photo')">📷 照片网格</button>
         <button class="btn btn-sm mode-btn" data-mode="ocr" onclick="setMode('ocr')">🔤 编号识别</button>
+        <button class="btn btn-sm mode-btn" data-mode="text" onclick="setMode('text')">📝 文字导入</button>
       </div>
       <div id="grid-settings" style="display:none;margin-top:8px;padding:10px;background:var(--surface);border-radius:var(--radius);">
         <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">
@@ -537,6 +538,19 @@
           <span style="font-size:12px;cursor:pointer;" onclick="startPick('grid1')" title="点击后点预览图">📏主网格 <span class="picked-color" id="picked-grid1" style="display:inline-block;width:14px;height:14px;border:1px solid #ccc;border-radius:3px;vertical-align:middle;"></span></span>
           <span style="font-size:12px;cursor:pointer;" onclick="startPick('grid2')" title="点击后点预览图">📐次网格 <span class="picked-color" id="picked-grid2" style="display:inline-block;width:14px;height:14px;border:1px solid #ccc;border-radius:3px;vertical-align:middle;"></span></span>
           <button class="btn btn-primary btn-sm" onclick="runGridRecognition()">🔍 检测网格</button>
+        </div>
+      </div>
+
+      <!-- Text import panel -->
+      <div id="text-import-panel" style="display:none;margin-top:8px;padding:10px;background:var(--surface);border-radius:var(--radius);">
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">
+          粘贴色号列表文本，或上传文字截图自动识别
+        </div>
+        <textarea id="text-import-input" rows="6" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:monospace;resize:vertical;" placeholder="每行格式：色号 数量&#10;例如：&#10;A1 50&#10;A3 30&#10;B2 100&#10;ZG8 25"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-primary btn-sm" onclick="parseTextImport()">📋 解析文字</button>
+          <button class="btn btn-outline btn-sm" onclick="document.getElementById('text-image-input').click()">🖼️ 上传文字图</button>
+          <input type="file" id="text-image-input" accept="image/*" style="display:none" onchange="handleTextImage(event)">
         </div>
       </div>
     </div>
@@ -1252,20 +1266,27 @@ function setMode(mode) {
   if (btn) btn.classList.add('active');
 
   const gridSettings = document.getElementById('grid-settings');
+  const textPanel = document.getElementById('text-import-panel');
   const previewImg = document.querySelector('#preview-container img');
 
+  // Hide all sub-panels
+  gridSettings.style.display = 'none';
+  textPanel.style.display = 'none';
+  if (previewImg) previewImg.classList.remove('preview-picking');
+  matchResults = [];
+  document.getElementById('match-results').innerHTML = '';
+  document.getElementById('match-actions').style.display = 'none';
+  pickingTarget = null;
+
   if (mode === 'pixel') {
-    gridSettings.style.display = 'none';
-    if (previewImg) previewImg.classList.remove('preview-picking');
     if (currentImg) extractColors(currentImg);
+  } else if (mode === 'text') {
+    textPanel.style.display = 'block';
   } else {
+    // photo or ocr
     gridSettings.style.display = 'block';
     if (previewImg) previewImg.classList.add('preview-picking');
-    matchResults = [];
-    document.getElementById('match-results').innerHTML = '';
-    document.getElementById('match-actions').style.display = 'none';
   }
-  pickingTarget = null;
 }
 
 // ===== COLOR PICKER =====
@@ -1618,6 +1639,88 @@ function buildMatchResults(matched) {
   renderMatchResults();
 }
 
+// ===== TEXT IMPORT =====
+function parseTextImport() {
+  const raw = document.getElementById('text-import-input').value.trim();
+  if (!raw) { toast('请粘贴色号列表'); return; }
+  const matched = parseColorCodeText(raw);
+  if (Object.keys(matched).length === 0) {
+    toast('未识别到有效色号，请检查格式');
+    return;
+  }
+  buildMatchResults(matched);
+  toast(`解析到 ${Object.keys(matched).length} 种色号，共 ${Object.values(matched).reduce((a,b)=>a+b,0)} 颗豆`);
+}
+
+function parseColorCodeText(text) {
+  const matched = {};
+  const lines = text.split(/[\n\r]+/);
+  for (const line of lines) {
+    // Try various formats: "A1 50", "A1 × 50", "A1 x50", "A1:50", "A1,50", "A1*50", "A1\t50"
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // Extract code (1-3 letters + 1-3 digits) and number
+    const patterns = [
+      /([A-Za-z]{1,3}\d{1,3})\s*[×xX*\t,:\s]\s*(\d+)/,
+      /(\d+)\s*[×xX*\t,:\s]\s*([A-Za-z]{1,3}\d{1,3})/,  // reversed: "50 A1"
+      /([A-Za-z]{1,3}\d{1,3})\s+(\d+)/,
+      /(\d+)\s+([A-Za-z]{1,3}\d{1,3})/,
+    ];
+
+    let code = null, count = null;
+    for (const pat of patterns) {
+      const m = trimmed.match(pat);
+      if (m) {
+        // Determine which group is code vs number
+        if (/^\d+$/.test(m[1])) {
+          count = parseInt(m[1]);
+          code = m[2].toUpperCase();
+        } else {
+          code = m[1].toUpperCase();
+          count = parseInt(m[2]);
+        }
+        break;
+      }
+    }
+
+    if (code && count > 0 && MARD_MAP[code]) {
+      matched[code] = (matched[code] || 0) + count;
+    }
+  }
+  return matched;
+}
+
+async function handleTextImage(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  toast('正在 OCR 识别文字图...');
+  let worker;
+  try {
+    worker = await loadTesseract();
+  } catch (e) {
+    toast('OCR 引擎加载失败，请改用粘贴文字');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const img = new Image();
+    img.onload = async function() {
+      try {
+        const { data: { text } } = await worker.recognize(img);
+        document.getElementById('text-import-input').value = text;
+        toast('OCR 识别完成，已填入文本框，请核对后点击解析');
+      } catch (e) {
+        toast('OCR 识别失败: ' + e.message);
+      }
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 // ===== IMAGE UPLOAD & PROCESSING =====
 const uploadZone = document.getElementById('upload-zone');
 
@@ -1844,6 +1947,8 @@ function clearMatches() {
   document.getElementById('preview-container').innerHTML = '';
   document.getElementById('mode-bar').style.display = 'none';
   document.getElementById('grid-settings').style.display = 'none';
+  document.getElementById('text-import-panel').style.display = 'none';
+  document.getElementById('text-import-input').value = '';
   ['bg','grid1','grid2'].forEach(k => {
     const el = document.getElementById(`picked-${k}`);
     if (el) el.style.background = '';
