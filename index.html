@@ -1211,9 +1211,61 @@ function clearMatches() {
   if (fileInput) fileInput.value = '';
 }
 
-// ===== STUBS FOR FUTURE TASKS =====
-function undoLastDeduction() { toast('请先完成撤销功能（Task 7）'); }
-function confirmDeduction() { toast('请先完成扣除功能（Task 7）'); }
+// ===== DEDUCTION & UNDO =====
+function confirmDeduction() {
+  if (!matchResults || matchResults.length === 0) {
+    toast('没有可扣除的匹配结果');
+    return;
+  }
+
+  // Save snapshot for undo (deep clone)
+  lastSnapshot = JSON.parse(JSON.stringify(warehouse));
+
+  // Deduct
+  let totalDeducted = 0;
+  matchResults.forEach(m => {
+    warehouse[m.code] = (warehouse[m.code] || 0) - m.count;
+    totalDeducted += m.count;
+  });
+
+  isDirty = true;
+  saveToLocal();
+  renderWarehouse();
+  updateStatusBar();
+
+  // Enable undo button
+  document.getElementById('btn-undo').disabled = false;
+
+  // Switch to warehouse tab to show results
+  switchTab('warehouse');
+
+  // Clear match results
+  clearMatches();
+
+  toast(`已扣除 ${totalDeducted} 颗豆子！记得保存到云端`);
+}
+
+function undoLastDeduction() {
+  if (!lastSnapshot) {
+    toast('没有可撤销的操作');
+    return;
+  }
+
+  // Confirm
+  if (!confirm('确定要撤销上次扣除操作吗？库存将恢复到扣除前的数量。')) {
+    return;
+  }
+
+  warehouse = JSON.parse(JSON.stringify(lastSnapshot));
+  lastSnapshot = null;
+  isDirty = true;
+  saveToLocal();
+  renderWarehouse();
+  updateStatusBar();
+
+  document.getElementById('btn-undo').disabled = true;
+  toast('已撤销上次扣除 ✅');
+}
 
 // ===== TAB SWITCHING =====
 function switchTab(tab) {
