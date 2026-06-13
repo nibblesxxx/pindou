@@ -832,16 +832,50 @@ const STORAGE_KEY_WAREHOUSE = 'bead_warehouse';
 const STORAGE_KEY_TOKEN = 'bead_github_token';
 const STORAGE_KEY_REPO = 'bead_github_repo';
 
+// ===== SETUP MODAL =====
+function checkSetup() {
+  const token = localStorage.getItem(STORAGE_KEY_TOKEN);
+  const repo = localStorage.getItem(STORAGE_KEY_REPO);
+  if (!token || !repo) {
+    showSetupModal();
+  }
+}
+
+function showSetupModal() {
+  const token = localStorage.getItem(STORAGE_KEY_TOKEN) || '';
+  const repo = localStorage.getItem(STORAGE_KEY_REPO) || '';
+  document.getElementById('setup-token').value = token;
+  document.getElementById('setup-repo').value = repo;
+  document.getElementById('setup-modal').classList.add('show');
+}
+
+function skipSetup() {
+  document.getElementById('setup-modal').classList.remove('show');
+  updateStatusBar();
+}
+
+function saveSetup() {
+  const token = document.getElementById('setup-token').value.trim();
+  const repo = document.getElementById('setup-repo').value.trim();
+
+  if (!token || !repo) {
+    alert('请填写 Token 和仓库路径，或点击"跳过"使用本地模式');
+    return;
+  }
+
+  localStorage.setItem(STORAGE_KEY_TOKEN, token);
+  localStorage.setItem(STORAGE_KEY_REPO, repo);
+  document.getElementById('setup-modal').classList.remove('show');
+  updateStatusBar();
+  toast('已连接 GitHub！点击"云端加载"获取数据');
+}
+
 // ===== STUBS FOR FUTURE TASKS =====
-function showSetupModal() { toast('请先完成设置功能（Task 4）'); }
 function loadFromGitHub() { toast('请先完成云端功能（Task 5）'); }
 function saveToGitHub() { toast('请先完成云端功能（Task 5）'); }
 function handleFileSelect(e) { toast('请先完成图片功能（Task 6）'); }
 function undoLastDeduction() { toast('请先完成撤销功能（Task 7）'); }
 function clearMatches() {}
-function skipSetup() {}
-function saveSetup() {}
-function checkSetup() { /* Implemented in Task 4 */ }
 
 // ===== TAB SWITCHING =====
 function switchTab(tab) {
