@@ -498,7 +498,11 @@
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">
         粘贴色号列表，或上传文字截图自动识别。支持格式：<code>A1 50</code> / <code>A3×30</code> / <code>B2:100</code>
       </div>
-      <textarea id="text-import-input" rows="8" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:monospace;resize:vertical;" placeholder="每行格式：色号 数量&#10;例如：&#10;A1 50&#10;A3 30&#10;B2 100&#10;ZG8 25"></textarea>
+      <textarea id="text-import-input" rows="6" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:monospace;resize:vertical;" placeholder="每行格式：色号 数量&#10;例如：&#10;A1 50&#10;A3 30&#10;B2 100&#10;ZG8 25"></textarea>
+      <div id="text-drop-zone" style="border:2px dashed #d0d5dd;border-radius:8px;padding:12px;text-align:center;margin-top:8px;cursor:pointer;transition:border-color 0.15s;font-size:12px;color:var(--text-secondary);"
+           onclick="document.getElementById('text-image-input').click()">
+        🖼️ 拖拽文字截图到此处，或点击上传
+      </div>
       <div style="display:flex;gap:8px;margin-top:8px;">
         <button class="btn btn-primary btn-sm" onclick="parseTextImport()">📋 解析文字</button>
         <button class="btn btn-outline btn-sm" onclick="document.getElementById('text-image-input').click()">🖼️ 上传文字图</button>
@@ -1313,6 +1317,30 @@ function parseColorCodeText(text) {
   }
   return matched;
 }
+
+// Drag-and-drop for text image
+(function() {
+  const zone = document.getElementById('text-drop-zone');
+  if (!zone) return;
+  zone.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    zone.style.borderColor = 'var(--primary)';
+    zone.style.background = 'rgba(74,144,217,0.04)';
+  });
+  zone.addEventListener('dragleave', function() {
+    zone.style.borderColor = '#d0d5dd';
+    zone.style.background = '';
+  });
+  zone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    zone.style.borderColor = '#d0d5dd';
+    zone.style.background = '';
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.match(/image\//)) {
+      handleTextImage({ target: { files: [file] } });
+    }
+  });
+})();
 
 async function handleTextImage(event) {
   const file = event.target.files[0];
