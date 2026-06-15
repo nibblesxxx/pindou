@@ -960,7 +960,6 @@ function getLowStockColors(threshold) {
 }
 
 function renderWarningBar() {
-  const panel = document.getElementById('panel-warehouse');
   let bar = document.getElementById('warning-bar');
   const search = document.getElementById('warehouse-search').value.toLowerCase();
 
@@ -984,7 +983,7 @@ function renderWarningBar() {
     bar.id = 'warning-bar';
     bar.className = 'warning-bar';
     // Restore collapsed state
-    if (localStorage.getItem('bead_warning_collapsed') === '1') {
+    if (localStorage.getItem(STORAGE_KEY_WARNING_COLLAPSED) === '1') {
       bar.classList.add('collapsed');
     }
     // Insert after controls, before grid
@@ -1017,7 +1016,7 @@ function toggleWarningBar() {
   const bar = document.getElementById('warning-bar');
   if (!bar) return;
   bar.classList.toggle('collapsed');
-  localStorage.setItem('bead_warning_collapsed', bar.classList.contains('collapsed') ? '1' : '0');
+  localStorage.setItem(STORAGE_KEY_WARNING_COLLAPSED, bar.classList.contains('collapsed') ? '1' : '0');
   renderWarningBar(); // refresh toggle text
 }
 
@@ -1049,6 +1048,7 @@ const STORAGE_KEY_WAREHOUSE = 'bead_warehouse';
 const STORAGE_KEY_TOKEN = 'bead_github_token';
 const STORAGE_KEY_REPO = 'bead_github_repo';
 const STORAGE_KEY_WARNING_THRESHOLD = 'bead_warning_threshold';
+const STORAGE_KEY_WARNING_COLLAPSED = 'bead_warning_collapsed';
 
 // ===== SETUP MODAL =====
 function checkSetup() {
