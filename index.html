@@ -1086,18 +1086,19 @@ function saveSetup() {
   const token = document.getElementById('setup-token').value.trim();
   const repo = document.getElementById('setup-repo').value.trim();
 
-  if (!token || !repo) {
-    alert('请填写 Token 和仓库路径，或点击"跳过"使用本地模式');
-    return;
-  }
-
-  localStorage.setItem(STORAGE_KEY_TOKEN, token);
-  localStorage.setItem(STORAGE_KEY_REPO, repo);
+  // Always save threshold
   const threshold = parseInt(document.getElementById('setup-threshold').value) || 200;
   localStorage.setItem(STORAGE_KEY_WARNING_THRESHOLD, threshold);
+
+  // Save GitHub config only if provided
+  if (token && repo) {
+    localStorage.setItem(STORAGE_KEY_TOKEN, token);
+    localStorage.setItem(STORAGE_KEY_REPO, repo);
+  }
+
   document.getElementById('setup-modal').classList.remove('show');
   updateStatusBar();
-  renderWarehouse(); // refresh warning bar with new threshold
+  renderWarehouse();
   toast('设置已保存！');
 }
 
