@@ -279,6 +279,90 @@
       color: #e67e22;
     }
 
+    /* Warning bar */
+    .warning-bar {
+      background: linear-gradient(135deg, #fff9e6, #fff3cd);
+      border: 1px solid var(--warning);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      margin-bottom: 10px;
+      transition: all var(--transition);
+    }
+    .warning-bar-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .warning-bar-title {
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .warning-bar-summary {
+      font-size: 11px;
+      color: #856404;
+    }
+    .warning-bar-toggle {
+      margin-left: auto;
+      font-size: 11px;
+      color: #999;
+      cursor: pointer;
+      user-select: none;
+      background: none;
+      border: none;
+      font-family: inherit;
+    }
+    .warning-bar-toggle:hover { color: #666; }
+    .warning-chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+    .warning-bar.collapsed .warning-chips {
+      display: none;
+    }
+    .warning-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all var(--transition);
+      white-space: nowrap;
+    }
+    .warning-chip:hover {
+      transform: scale(1.05);
+      box-shadow: var(--shadow);
+    }
+    .warning-chip.severe {
+      background: #ffe0e0;
+      border-color: #e8c0c0;
+    }
+    .warning-chip.low-warn {
+      background: #fff3cd;
+      border-color: #e8d080;
+    }
+    .warning-chip .wc-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      border: 1px solid rgba(0,0,0,0.1);
+      flex-shrink: 0;
+    }
+
+    /* Card highlight flash for scroll-to */
+    .color-card.highlight {
+      animation: card-flash 0.5s ease 3;
+    }
+    @keyframes card-flash {
+      50% { background: #d0e4ff; border-color: var(--primary); box-shadow: 0 0 8px rgba(74,144,217,0.4); }
+    }
+
     /* Edit modal */
     .edit-modal-body {
       text-align: center;
