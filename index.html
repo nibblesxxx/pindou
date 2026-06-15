@@ -941,6 +941,102 @@ function findNearbyColors(code, n = 3) {
     .slice(0, n);
 }
 
+// ===== LOW STOCK WARNING =====
+function getWarningThreshold() {
+  const v = parseInt(localStorage.getItem(STORAGE_KEY_WARNING_THRESHOLD));
+  return (v > 0) ? v : 200;
+}
+
+function getLowStockColors(threshold) {
+  const results = [];
+  for (const c of MARD_COLORS) {
+    const qty = warehouse[c.code] || 0;
+    if (qty > 0 && qty < threshold) {
+      results.push({ code: c.code, r: c.r, g: c.g, b: c.b, qty });
+    }
+  }
+  results.sort((a, b) => a.qty - b.qty);
+  return results;
+}
+
+function renderWarningBar() {
+  const panel = document.getElementById('panel-warehouse');
+  let bar = document.getElementById('warning-bar');
+  const search = document.getElementById('warehouse-search').value.toLowerCase();
+
+  const threshold = getWarningThreshold();
+  let lowStock = getLowStockColors(threshold);
+
+  // Filter by search if active
+  if (search) {
+    lowStock = lowStock.filter(c => c.code.toLowerCase().includes(search));
+  }
+
+  // Remove old bar if no warnings
+  if (lowStock.length === 0) {
+    if (bar) bar.remove();
+    return;
+  }
+
+  // Create bar if not exists
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'warning-bar';
+    bar.className = 'warning-bar';
+    // Restore collapsed state
+    if (localStorage.getItem('bead_warning_collapsed') === '1') {
+      bar.classList.add('collapsed');
+    }
+    // Insert after controls, before grid
+    const grid = document.getElementById('warehouse-grid');
+    grid.parentNode.insertBefore(bar, grid);
+  }
+
+  const severeThreshold = Math.floor(threshold * 0.5);
+  const collapsed = bar.classList.contains('collapsed');
+
+  bar.innerHTML = `
+    <div class="warning-bar-header">
+      <span class="warning-bar-title">⚠ 低库存预警</span>
+      <span class="warning-bar-summary">（阈值: ${threshold}颗，共 ${lowStock.length} 个色号不足）</span>
+      <button class="warning-bar-toggle" onclick="toggleWarningBar()">${collapsed ? '▼ 展开' : '▲ 收起'}</button>
+    </div>
+    <div class="warning-chips">
+      ${lowStock.map(c => {
+        const cls = c.qty < severeThreshold ? 'severe' : 'low-warn';
+        return `<span class="warning-chip ${cls}" onclick="scrollToColor('${c.code}')" title="${c.code} 仅剩 ${c.qty} 颗">
+          <span class="wc-swatch" style="background:rgb(${c.r},${c.g},${c.b})"></span>
+          ${c.code} (${c.qty})
+        </span>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function toggleWarningBar() {
+  const bar = document.getElementById('warning-bar');
+  if (!bar) return;
+  bar.classList.toggle('collapsed');
+  localStorage.setItem('bead_warning_collapsed', bar.classList.contains('collapsed') ? '1' : '0');
+  renderWarningBar(); // refresh toggle text
+}
+
+function scrollToColor(code) {
+  // Switch to warehouse tab if not already
+  switchTab('warehouse');
+
+  // Find the card element
+  const cards = document.querySelectorAll('#warehouse-grid .color-card');
+  for (const card of cards) {
+    if (card.querySelector('.code')?.textContent === code) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.classList.add('highlight');
+      setTimeout(() => card.classList.remove('highlight'), 1500);
+      break;
+    }
+  }
+}
+
 // ===== STATE =====
 let warehouse = {};        // {A1: 500, A10: 200, ...}
 let lastSnapshot = null;   // snapshot before last deduction for undo
@@ -952,6 +1048,7 @@ let editingCode = null;    // which color card is being edited
 const STORAGE_KEY_WAREHOUSE = 'bead_warehouse';
 const STORAGE_KEY_TOKEN = 'bead_github_token';
 const STORAGE_KEY_REPO = 'bead_github_repo';
+const STORAGE_KEY_WARNING_THRESHOLD = 'bead_warning_threshold';
 
 // ===== SETUP MODAL =====
 function checkSetup() {
