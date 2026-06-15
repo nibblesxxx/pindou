@@ -591,8 +591,14 @@
 <!-- Setup modal -->
 <div class="modal-overlay" id="setup-modal">
   <div class="modal">
-    <h2>⚙️ 配置 GitHub 同步</h2>
-    <p>需要 GitHub Personal Access Token 来读写云端仓库中的库存数据。</p>
+    <h2>⚙️ 配置</h2>
+    <p>GitHub 同步设置和库存预警阈值。</p>
+    <label>⚠ 低库存预警阈值</label>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <input type="number" id="setup-threshold" value="200" min="1" max="99999" style="width:100px;">
+      <span style="font-size:14px;">颗</span>
+    </div>
+    <p style="font-size:11px;color:var(--text-secondary);margin-top:2px;">库存低于此数量且不为 0 的色号将显示预警</p>
     <ol style="font-size:12px;color:var(--text-secondary);padding-left:16px;line-height:1.8;">
       <li>打开 <a href="https://github.com/settings/tokens" target="_blank">GitHub Token 设置</a></li>
       <li>点击 "Generate new token (classic)"</li>
@@ -1064,12 +1070,16 @@ function showSetupModal() {
   const repo = localStorage.getItem(STORAGE_KEY_REPO) || '';
   document.getElementById('setup-token').value = token;
   document.getElementById('setup-repo').value = repo;
+  document.getElementById('setup-threshold').value = getWarningThreshold();
   document.getElementById('setup-modal').classList.add('show');
 }
 
 function skipSetup() {
+  const threshold = parseInt(document.getElementById('setup-threshold').value) || 200;
+  localStorage.setItem(STORAGE_KEY_WARNING_THRESHOLD, threshold);
   document.getElementById('setup-modal').classList.remove('show');
   updateStatusBar();
+  renderWarehouse();
 }
 
 function saveSetup() {
@@ -1083,9 +1093,12 @@ function saveSetup() {
 
   localStorage.setItem(STORAGE_KEY_TOKEN, token);
   localStorage.setItem(STORAGE_KEY_REPO, repo);
+  const threshold = parseInt(document.getElementById('setup-threshold').value) || 200;
+  localStorage.setItem(STORAGE_KEY_WARNING_THRESHOLD, threshold);
   document.getElementById('setup-modal').classList.remove('show');
   updateStatusBar();
-  toast('已连接 GitHub！点击"云端加载"获取数据');
+  renderWarehouse(); // refresh warning bar with new threshold
+  toast('设置已保存！');
 }
 
 // ===== GITHUB API =====
